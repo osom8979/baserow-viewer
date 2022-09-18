@@ -1,0 +1,14 @@
+.main {
+    display: flex;
+    flex-direction: column;
+}
+
+.tools {
+    display: flex;
+    flex-direction: row;
+}
+
+.longText {
+    white-space: pre;
+    font-weight: bold;
+}
