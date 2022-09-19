@@ -187,6 +187,28 @@ export default function BaserowTable() {
     field: x.name,
     flex: getFlexSize(x),
     minWidth: getMinWidth(x),
+    sortComparator: (v1, v2, param1, param2) => {
+      if (v1 === null && v2 === null) {
+        return 0;
+      } else if (v1 === null && v2 !== null) {
+        return +1;
+      } else if (v1 !== null && v2 === null) {
+        return -1;
+      }
+
+      console.assert(v1 !== null);
+      console.assert(v2 !== null);
+
+      console.debug('sortComparator', v1, v2);
+      if (x.type === 'single_select') {
+        return v1.value.localeCompare(v2.value);
+      } else if (x.type === 'multiple_select') {
+        const v1v = v1.value.map(x => x.value).join(',');
+        const v2v = v2.value.map(x => x.value).join(',');
+        return v1v.localeCompare(v2v.value);
+      }
+      return v1.localeCompare(v2);
+    },
     renderCell: (params) => {
       const value = params.value;
       if (typeof value === 'undefined') {
