@@ -12,3 +12,7 @@
     white-space: pre;
     font-weight: bold;
 }
+
+.imageFile {
+    border: 1px solid gray;
+}

@@ -1,10 +1,16 @@
 import type {NextPage} from 'next';
 import {ChangeEvent, useEffect, useState} from 'react';
 import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import Stack from '@mui/material/Stack';
 import CheckBox from '@mui/icons-material/CheckBox';
 import CheckBoxOutlineBlank from '@mui/icons-material/CheckBoxOutlineBlank';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import Stack from '@mui/material/Stack';
 import {DataGrid, GridColDef, GridValidRowModel} from '@mui/x-data-grid';
 import {blue, green, orange, red, grey, yellow, common} from '@mui/material/colors';
 import AxiosLib from 'axios';
@@ -68,13 +74,14 @@ type BaserowFieldTypes =
   | 'multiple_select'
   | 'file';
 
-const BASEROW_FIELD_BOOLEAN = 'boolean';
-const BASEROW_FIELD_DATE = 'date';
-const BASEROW_FIELD_TEXT = 'text';
 const BASEROW_FIELD_LONG_TEXT = 'long_text';
-const BASEROW_FIELD_SINGLE_SELECT = 'single_select';
-const BASEROW_FIELD_MULTIPLE_SELECT = 'multiple_select';
-const BASEROW_FIELD_FILE = 'file';
+
+// const BASEROW_FIELD_SINGLE_SELECT = 'single_select';
+// const BASEROW_FIELD_MULTIPLE_SELECT = 'multiple_select';
+// const BASEROW_FIELD_FILE = 'file';
+// const BASEROW_FIELD_BOOLEAN = 'boolean';
+// const BASEROW_FIELD_DATE = 'date';
+// const BASEROW_FIELD_TEXT = 'text';
 
 const BASEROW_FIELD_MIN_WIDTH: Record<BaserowFieldTypes, number> = {
   boolean: 40,
@@ -115,12 +122,14 @@ interface BaserowThumbnail {
   height: number;
 }
 interface BaserowThumbnails {
+  card_cover: BaserowThumbnail;
   tiny: BaserowThumbnail;
   small: BaserowThumbnail;
 }
 interface BaserowFile {
   url: string;
   thumbnails: BaserowThumbnails;
+  visible_name: string;
   name: string;
   size: number;
   mime_type: string;
@@ -246,13 +255,15 @@ function dataGridSortComparator(
   }
 }
 
-function dataGridRenderCell(field: BaserowField, value: BaserowRecord) {
+function dataGridRenderCell(
+  field: BaserowField,
+  value: BaserowRecord,
+  handlerFile: (file: BaserowFile) => void,
+) {
   if (field.type === 'single_select') {
     const real = value as BaserowSingleSelect;
     return (
-      <Stack direction="row" spacing={1}>
-        <Chip label={real.value} sx={getChipStyle(real.color)} />
-      </Stack>
+      <Chip label={real.value} sx={getChipStyle(real.color)} />
     );
   }
 
@@ -260,7 +271,7 @@ function dataGridRenderCell(field: BaserowField, value: BaserowRecord) {
     const real = value as BaserowMultipleSelect;
     return (
       <Stack direction="row" spacing={1}>
-        {real.map(x => (<Chip label={x.value} sx={getChipStyle(x.color)} />))}
+        {real.map(x => (<Chip key={x.id} label={x.value} sx={getChipStyle(x.color)} />))}
       </Stack>
     );
   }
@@ -288,11 +299,27 @@ function dataGridRenderCell(field: BaserowField, value: BaserowRecord) {
     return <span>{real}</span>;
   }
 
-  return <span>{`${value}`}</span>;
-}
+  if (field.type === 'file') {
+    const real = value as BaserowFiles;
+    return (
+      <Stack direction="row" spacing={1}>
+        {real.map(x => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className={styles.imageFile}
+            key={x.name}
+            src={x.thumbnails.tiny.url}
+            alt={x.visible_name}
+            width={x.thumbnails.tiny.width}
+            height={x.thumbnails.tiny.height}
+            onClick={() => handlerFile(x)}
+          />
+        ))}
+      </Stack>
+    );
+  }
 
-function hasPersist(): boolean {
-  return DEFAULT_STORAGE.getItem(STORAGE_KEY) === null
+  return <span>{`${value}`}</span>;
 }
 
 function getDefaultPersist(): PersistData {
@@ -323,6 +350,8 @@ const BaserowTable: NextPage = () => {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [params, setParams] = useState(readPersist());
+  const [showDialog, setShowDialog] = useState(false);
+  const [dialogFile, setDialogFile] = useState<BaserowFile>();
 
   const onChangeAddress = (event: ChangeEvent<HTMLInputElement>) => {
     setParams((prevState) => ({...prevState, address: event.target.value}));
@@ -374,25 +403,28 @@ const BaserowTable: NextPage = () => {
     </div>
   );
 
-  const requestRows = async () => {
+  const requestRows = async (p: PersistData) => {
     try {
       console.debug('Request baserow data ...');
-      const axios = createAxios(params.address, params.token);
-      const fields = await axios.get(getFieldsPath(params.table));
-      const rows = await axios.get(getRowsPath(params.table, params.view));
+      const axios = createAxios(p.address, p.token);
+      const fields = await axios.get(getFieldsPath(p.table));
+      const rows = await axios.get(getRowsPath(p.table, p.view));
+      console.debug('Request result', fields, rows);
       setFields(() => fields.data);
       setRows(() => rows.data);
+      setError(() => undefined);
+      writePersist(p);
     } catch (e) {
+      console.error('Request baserow data error', e);
       setError(() => `${e}`);
     } finally {
       setLoading(false);
-      writePersist(params);
     }
   };
 
   useEffect(() => {
     (async () => {
-      await requestRows();
+      await requestRows(params);
     })();
   }, [params]);
 
@@ -424,6 +456,14 @@ const BaserowTable: NextPage = () => {
     </div>;
   }
 
+  const onClickDialogOpen = (file: BaserowFile) => {
+    setDialogFile(() => file);
+    setShowDialog(true);
+  };
+  const onClickDialogClose = () => {
+    setShowDialog(false);
+  };
+
   const gridColumns: Array<MuiDataGridCol> = fields.map(x => ({
     field: x.name,
     flex: getFlex(x),
@@ -452,11 +492,40 @@ const BaserowTable: NextPage = () => {
       } else {
         console.assert(value !== null);
         console.assert(typeof value !== 'undefined');
-        return dataGridRenderCell(x, value as BaserowRecord);
+        return dataGridRenderCell(x, value as BaserowRecord, onClickDialogOpen);
       }
     },
   }));
   const gridRows: Array<BaserowRow> = rows.results;
+
+  const dialog = (
+    <Dialog
+      open={showDialog}
+      onClose={onClickDialogClose}
+      aria-labelledby="alert-dialog-title"
+      aria-describedby="alert-dialog-description"
+    >
+      <DialogTitle id="alert-dialog-title">
+        {dialogFile?.visible_name}
+      </DialogTitle>
+      <DialogContent>
+        <DialogContentText id="alert-dialog-description">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={dialogFile?.url}
+            alt={dialogFile?.visible_name}
+            width={dialogFile?.image_width}
+            height={dialogFile?.image_height}
+          />
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClickDialogClose} autoFocus>
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 
   return (
     <div className={styles.main}>
@@ -472,6 +541,8 @@ const BaserowTable: NextPage = () => {
           getRowHeight={() => 'auto'}
         ></DataGrid>
       </div>
+
+      {dialog}
     </div>
   );
 };
