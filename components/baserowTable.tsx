@@ -322,21 +322,21 @@ function dataGridRenderCell(
   return <span>{`${value}`}</span>;
 }
 
-function getDefaultPersist(): PersistData {
+function getDefaultPersist() {
   return {
     address: BASEROW_ADDRESS,
     token: BASEROW_TOKEN,
     table: BASEROW_TABLE_ID,
     view: BASEROW_VIEW_ID,
-  } as PersistData;
+  };
 }
 
-function readPersist(): PersistData {
+function readPersist() {
   const data = DEFAULT_STORAGE.getItem(STORAGE_KEY);
   if (data === null) {
-    return getDefaultPersist();
+    return {};
   } else {
-    return JSON.parse(data) as PersistData;
+    return JSON.parse(data);
   }
 }
 
@@ -344,12 +344,43 @@ function writePersist(data: PersistData): void {
   DEFAULT_STORAGE.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
+function readQueryParams() {
+  const params = new URLSearchParams(window.location.search)
+
+  const address = params.get('address');
+  const token = params.get('token');
+  const table = params.get('table');
+  const view = params.get('view');
+
+  const result = {
+    address,
+    token,
+    table: table ? Number.parseInt(table) : null,
+    view: view ? Number.parseInt(view) : null,
+  };
+
+  Object.keys(result).forEach(key => {
+    if (result[key] === null) {
+      delete result[key];
+    }
+  });
+
+  return result;
+}
+
+function readBestPersist(): PersistData {
+  const def = getDefaultPersist();
+  const persist = readPersist();
+  const params = readQueryParams();
+  return {... def, ... persist,  ... params} as PersistData;
+}
+
 const BaserowTable: NextPage = () => {
   const [fields, setFields] = useState<BaserowFields>();
   const [rows, setRows] = useState<BaserowRows>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [params, setParams] = useState(readPersist());
+  const [params, setParams] = useState(readBestPersist());
   const [showDialog, setShowDialog] = useState(false);
   const [dialogFile, setDialogFile] = useState<BaserowFile>();
 
