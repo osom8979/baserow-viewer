@@ -16,11 +16,6 @@ import {blue, green, orange, red, grey, yellow, common} from '@mui/material/colo
 import AxiosLib from 'axios';
 import styles from '../styles/BaserowTable.module.css';
 
-const BASEROW_ADDRESS = '';
-const BASEROW_TOKEN = '';
-const BASEROW_TABLE_ID = 0;
-const BASEROW_VIEW_ID = 0;
-
 const DEFAULT_STORAGE = window.localStorage;
 const VALIDATE_STATUS = [200];
 const STORAGE_KEY = 'baserow-viewer';
@@ -88,7 +83,7 @@ const BASEROW_FIELD_MIN_WIDTH: Record<BaserowFieldTypes, number> = {
   date: 80,
   text: 120,
   long_text: 240,
-  single_select: 180,
+  single_select: 220,
   multiple_select: 180,
   file: 80,
 };
@@ -322,15 +317,6 @@ function dataGridRenderCell(
   return <span>{`${value}`}</span>;
 }
 
-function getDefaultPersist() {
-  return {
-    address: BASEROW_ADDRESS,
-    token: BASEROW_TOKEN,
-    table: BASEROW_TABLE_ID,
-    view: BASEROW_VIEW_ID,
-  };
-}
-
 function readPersist() {
   const data = DEFAULT_STORAGE.getItem(STORAGE_KEY);
   if (data === null) {
@@ -353,8 +339,8 @@ function readQueryParams() {
   const view = params.get('view');
 
   const result = {
-    address,
-    token,
+    address: typeof address === 'string' ? decodeURIComponent(address) : null,
+    token: typeof token === 'string' ? decodeURIComponent(token) : null,
     table: table ? Number.parseInt(table) : null,
     view: view ? Number.parseInt(view) : null,
   };
@@ -369,18 +355,39 @@ function readQueryParams() {
 }
 
 function readBestPersist(): PersistData {
-  const def = getDefaultPersist();
   const persist = readPersist();
   const params = readQueryParams();
-  return {... def, ... persist,  ... params} as PersistData;
+  return {... persist,  ... params} as PersistData;
+}
+
+function getRequestURI(p: PersistData) {
+  let result = `${window.location}?`;
+  if (p.address) {
+    result += `address=${encodeURIComponent(p.address)}&`;
+  }
+  if (p.token) {
+    result += `token=${p.token}&`;
+  }
+  if (p.table) {
+    result += `table=${p.table}&`;
+  }
+  if (p.view) {
+    result += `view=${p.view}&`;
+  }
+  return result;
 }
 
 const BaserowTable: NextPage = () => {
+  const bestPersist = readBestPersist();
+  console.debug('Best Persist', bestPersist);
+  const requestUri = getRequestURI(bestPersist);
+  console.debug('Request URI', requestUri);
+
   const [fields, setFields] = useState<BaserowFields>();
   const [rows, setRows] = useState<BaserowRows>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [params, setParams] = useState(readBestPersist());
+  const [params, setParams] = useState(bestPersist);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogFile, setDialogFile] = useState<BaserowFile>();
 
@@ -444,11 +451,11 @@ const BaserowTable: NextPage = () => {
       setFields(() => fields.data);
       setRows(() => rows.data);
       setError(() => undefined);
-      writePersist(p);
     } catch (e) {
       console.error('Request baserow data error', e);
       setError(() => `${e}`);
     } finally {
+      writePersist(p);
       setLoading(false);
     }
   };
